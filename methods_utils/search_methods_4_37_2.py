@@ -113,6 +113,12 @@ def new_greedy_search(
         cd_type,
     ) = prepare_kwargs_for_cd(input_ids, model_kwargs)
 
+    # record prompt length so we can compute generated token count
+    prompt_len = input_ids.shape[1]
+
+    # record prompt length so we can compute generated token count
+    prompt_len = input_ids.shape[1]
+
     this_peer_finished = False  # used by synced_gpus only
     while True:
         if synced_gpus:
@@ -131,13 +137,36 @@ def new_greedy_search(
         model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
         # forward pass to get next token
-        outputs = self(
-            **model_inputs,
-            input_scaling=model_kwargs["input_scaling"],  # HalTrapper: new argument
-            return_dict=True,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+        # Optionally apply context-reminder scaling periodically by borrowing
+        # the contrastive branch' input_scaling. This is a simple prototype
+        #: if `reminder_interval` is set (>0) the CD scaling will be applied
+        # every `reminder_interval` generated tokens.
+        reminder_interval = model_kwargs.get("reminder_interval", 0)
+        apply_reminder = (
+            use_cd
+            and reminder_interval
+            and (input_ids.shape[1] - prompt_len) > 0
+            and ((input_ids.shape[1] - prompt_len) % reminder_interval == 0)
         )
+
+        if apply_reminder and model_kwargs_cd is not None:
+            # Use the contrastive input scaling as a reminder
+            reminder_scaling = model_kwargs_cd.get("input_scaling", None)
+            outputs = self(
+                **model_inputs,
+                input_scaling=reminder_scaling,
+                return_dict=True,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+            )
+        else:
+            outputs = self(
+                **model_inputs,
+                input_scaling=model_kwargs.get("input_scaling", None),  # HalTrapper: new argument
+                return_dict=True,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+            )
 
         if synced_gpus and this_peer_finished:
             continue  # don't waste resources running the code we don't need
@@ -152,7 +181,7 @@ def new_greedy_search(
             )
             outputs_cd = self(
                 **model_inputs_cd,
-                input_scaling=model_kwargs_cd["input_scaling"],
+                input_scaling=model_kwargs_cd.get("input_scaling", None),
                 return_dict=True,
                 output_attentions=(
                     output_attentions
@@ -443,13 +472,36 @@ def new_sample(
         model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
         # forward pass to get next token
-        outputs = self(
-            **model_inputs,
-            input_scaling=model_kwargs["input_scaling"],  # HalTrapper: new argument
-            return_dict=True,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+        # Optionally apply context-reminder scaling periodically by borrowing
+        # the contrastive branch' input_scaling. This is a simple prototype
+        #: if `reminder_interval` is set (>0) the CD scaling will be applied
+        # every `reminder_interval` generated tokens.
+        reminder_interval = model_kwargs.get("reminder_interval", 0)
+        apply_reminder = (
+            use_cd
+            and reminder_interval
+            and (input_ids.shape[1] - prompt_len) > 0
+            and ((input_ids.shape[1] - prompt_len) % reminder_interval == 0)
         )
+
+        if apply_reminder and model_kwargs_cd is not None:
+            # Use the contrastive input scaling as a reminder
+            reminder_scaling = model_kwargs_cd.get("input_scaling", None)
+            outputs = self(
+                **model_inputs,
+                input_scaling=reminder_scaling,
+                return_dict=True,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+            )
+        else:
+            outputs = self(
+                **model_inputs,
+                input_scaling=model_kwargs.get("input_scaling", None),  # HalTrapper: new argument
+                return_dict=True,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+            )
 
         if synced_gpus and this_peer_finished:
             continue  # don't waste resources running the code we don't need
@@ -464,7 +516,7 @@ def new_sample(
             )
             outputs_cd = self(
                 **model_inputs_cd,
-                input_scaling=model_kwargs_cd["input_scaling"],
+                input_scaling=model_kwargs_cd.get("input_scaling", None),
                 return_dict=True,
                 output_attentions=(
                     output_attentions
@@ -759,6 +811,7 @@ def new_beam_search(
 
     # record the prompt length of decoder
     decoder_prompt_len = input_ids.shape[-1]
+    prompt_len = decoder_prompt_len
     while True:
         if synced_gpus:
             # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
@@ -774,13 +827,32 @@ def new_beam_search(
 
         model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
-        outputs = self(
-            **model_inputs,
-            input_scaling=model_kwargs["input_scaling"],  # HalTrapper: new argument
-            return_dict=True,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+        # Optionally apply context-reminder scaling periodically by borrowing
+        # the contrastive branch' input_scaling. This is a simple prototype
+        reminder_interval = model_kwargs.get("reminder_interval", 0)
+        apply_reminder = (
+            use_cd
+            and reminder_interval
+            and (input_ids.shape[1] - prompt_len) > 0
+            and ((input_ids.shape[1] - prompt_len) % reminder_interval == 0)
         )
+
+        if apply_reminder and model_kwargs_cd is not None:
+            outputs = self(
+                **model_inputs,
+                input_scaling=model_kwargs_cd.get("input_scaling", None),
+                return_dict=True,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+            )
+        else:
+            outputs = self(
+                **model_inputs,
+                input_scaling=model_kwargs.get("input_scaling", None),  # HalTrapper: new argument
+                return_dict=True,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+            )
 
         if synced_gpus and this_peer_finished:
             cur_len = cur_len + 1
@@ -796,7 +868,7 @@ def new_beam_search(
             )
             outputs_cd = self(
                 **model_inputs_cd,
-                input_scaling=model_kwargs_cd["input_scaling"],
+                input_scaling=model_kwargs_cd.get("input_scaling", None),
                 return_dict=True,
                 output_attentions=(
                     output_attentions

@@ -487,13 +487,22 @@ class CHAIR(object):
 
             output["sentences"].append(cap_dict)
 
-        chair_s = num_hallucinated_caps / num_caps
-        chair_i = hallucinated_word_count / coco_word_count
+        chair_s = num_hallucinated_caps / num_caps if num_caps != 0 else 0.0
+        chair_i = (
+            hallucinated_word_count / coco_word_count if coco_word_count != 0 else 0.0
+        )
         # add
-        recall = num_recall_gt_objects / num_gt_objects
-        precision = num_recall_gt_objects / num_generated_objects
-        f1 = 2 * (recall * precision) / (precision + recall)
-        avg_len = 0.01 * len_caps / num_caps
+        recall = num_recall_gt_objects / num_gt_objects if num_gt_objects != 0 else 0.0
+        precision = (
+            num_recall_gt_objects / num_generated_objects
+            if num_generated_objects != 0
+            else 0.0
+        )
+        if (precision + recall) == 0:
+            f1 = 0.0
+        else:
+            f1 = 2 * (recall * precision) / (precision + recall)
+        avg_len = 0.01 * len_caps / num_caps if num_caps != 0 else 0.0
 
         output["overall_metrics"] = {
             "CHAIRs": chair_s,

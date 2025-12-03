@@ -305,8 +305,14 @@ class LLaVA(LM):
         self.model_path = os.fspath(get_path_from_table(name))
 
         self.model_name = get_model_name_from_path(self.model_path)
+        # Ensure an offload folder exists so large models can be offloaded to disk
+        # when device_map places weights on disk. This is necessary for CPU-only
+        # setups or limited GPU memory.
+        offload_dir = os.path.join(os.getcwd(), "model_offload")
+        os.makedirs(offload_dir, exist_ok=True)
+
         tokenizer, model, image_processor, context_len = load_pretrained_model(
-            self.model_path, None, self.model_name
+            self.model_path, None, self.model_name, offload_folder=offload_dir
         )
 
         self.tokenizer = tokenizer
@@ -438,7 +444,7 @@ class LLaVA(LM):
                 prompt, self.tokenizer, IMAGE_TOKEN_INDEX, return_tensors="pt"
             )
             .unsqueeze(0)
-            .cuda()
+            .to(self.model.device)
         )
 
         with torch.inference_mode():
@@ -608,7 +614,7 @@ class Qwen2VL(LM):
             padding=True,
             return_tensors="pt",
         )
-        inputs = inputs.to("cuda")
+        inputs = inputs.to(self.model.device)
 
         # Inference: Generation of the output
 
@@ -749,7 +755,7 @@ class JanusPro(LM):
                 trust_remote_code=True,
             )
             .to(torch.bfloat16)
-            .cuda()
+            .to(self.model.device)
             .eval()
         )
 

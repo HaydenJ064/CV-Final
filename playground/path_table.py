@@ -17,11 +17,11 @@ _PATH_TABLE = {
     "siglip-so400m-patch14-384": "google/siglip-so400m-patch14-384",
     # You should set up these paths.
     # Please download COCO dataset from https://cocodataset.org/
-    "COCO path": "path/to/COCO/val2014",
+    "COCO path": "C:\\datasets\\coco\\val2014",
     # `git clone https://github.com/junyangwang0410/AMBER.git`, then set up the AMBER first
     "AMBER path": "path/to/AMBER",
     # `git clone https://github.com/Vision-CAIR/MiniGPT-4.git`, then set up the MiniGPT-4 first
-    "MiniGPT4 repo root": "path/to/MiniGPT-4",
+    "MiniGPT4 repo root": "C:\\\\repos\\\\MiniGPT-4",
 }
 
 
@@ -29,6 +29,13 @@ def get_path_from_table(name: str) -> Path:
     if name not in _PATH_TABLE:
         raise KeyError(f"'{name}' not found in path table.")
     path = _PATH_TABLE[name]
+    # If the entry looks like a HuggingFace repo id (contains a forward slash and
+    # is not an absolute/local path), return it as a string so HF APIs receive
+    # the repo id unchanged (avoid Windows path separator conversion).
+    if isinstance(path, str) and "/" in path and not os.path.isabs(path):
+        print_note(f"Get '{name}' from HF id {path}")
+        return path
+
     print_note(f"Get '{name}' from path {path}")
     return Path(path)
 
@@ -68,3 +75,4 @@ def get_path_from_table(name: str) -> Path:
 #             )
 
 #     raise FileNotFoundError(f"Path for {name!r} not found. Checked {checked_paths}")
+

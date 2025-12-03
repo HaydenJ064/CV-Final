@@ -221,6 +221,12 @@ class LlavaModified(LLaVA, CTMixin):
 
         # Model
         disable_torch_init()
+        # If CUDA is not available, ensure model parameters are in float32
+        if not torch.cuda.is_available():
+            try:
+                self.model = self.model.to(torch.float32)
+            except Exception:
+                pass
 
         qs = args.query
         image_token_se = (
@@ -282,9 +288,10 @@ class LlavaModified(LLaVA, CTMixin):
             image_files = self.image_parser(args)
             images = self.load_images(image_files)
             image_sizes = [x.size for x in images]
+            tensor_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
             images_tensor = process_images(
                 images, self.image_processor, self.model.config
-            ).to(self.model.device, dtype=torch.float16)
+            ).to(self.model.device, dtype=tensor_dtype)
 
         # HalTrapper: Modification Here
         if args.append is not None:
@@ -293,7 +300,7 @@ class LlavaModified(LLaVA, CTMixin):
                     prompt, self.tokenizer, IMAGE_TOKEN_INDEX, return_tensors="pt"
                 )
                 .unsqueeze(0)
-                .cuda()
+                .to(self.model.device)
             )
             GRABER["input_ids_offset"] = len(input_ids_origin[0])
 
@@ -305,7 +312,7 @@ class LlavaModified(LLaVA, CTMixin):
                 prompt, self.tokenizer, IMAGE_TOKEN_INDEX, return_tensors="pt"
             )
             .unsqueeze(0)
-            .cuda()
+            .to(self.model.device)
         )
 
         # HalTrapper: Modification here
@@ -345,11 +352,11 @@ class LlavaModified(LLaVA, CTMixin):
                 torch.cat(context_ids, dim=0).to(input_ids.dtype).to(input_ids.device)
             )
             context_scaling = (
-                torch.cat(context_scaling, dim=0).to(torch.float16).to(input_ids.device)
+                torch.cat(context_scaling, dim=0).to(tensor_dtype).to(input_ids.device)
             )
 
             input_ids_cd = input_ids.clone()
-            input_scaling_cd = torch.zeros_like(input_ids, dtype=torch.float16)
+            input_scaling_cd = torch.zeros_like(input_ids, dtype=tensor_dtype)
 
             image_token_at = torch.where(input_ids_cd == IMAGE_TOKEN_INDEX)[1]
 
@@ -418,7 +425,7 @@ class LlavaModified(LLaVA, CTMixin):
                     prompt_cd, self.tokenizer, IMAGE_TOKEN_INDEX, return_tensors="pt"
                 )
                 .unsqueeze(0)
-                .cuda()
+                .to(self.model.device)
             )
 
             images_tensor_cd = None
@@ -429,7 +436,7 @@ class LlavaModified(LLaVA, CTMixin):
             from transformers.generation.logits_process import LogitsProcessorList
             from methods_utils.pai_cfg import init_cfg_processor
 
-            input_scaling = torch.zeros_like(input_ids, dtype=torch.float16)
+            input_scaling = torch.zeros_like(input_ids, dtype=tensor_dtype)
 
             image_token_at = torch.where(input_ids == IMAGE_TOKEN_INDEX)[1]
 
@@ -478,7 +485,7 @@ class LlavaModified(LLaVA, CTMixin):
                     prompt_cd, self.tokenizer, IMAGE_TOKEN_INDEX, return_tensors="pt"
                 )
                 .unsqueeze(0)
-                .cuda()
+                .to(self.model.device)
             )
 
             images_tensor_cd = None
@@ -1031,7 +1038,7 @@ class Qwen2VLModified(Qwen2VL, CTMixin):
             return_tensors="pt",
         )
 
-        inputs = inputs.to("cuda")
+        inputs = inputs.to(self.model.device)
         _input_ids = inputs["input_ids"]
         GRABER["input_ids"] = _input_ids
 
@@ -1092,7 +1099,7 @@ class Qwen2VLModified(Qwen2VL, CTMixin):
                 return_tensors="pt",
             )
 
-            inputs_origin = inputs_origin.to("cuda")
+            inputs_origin = inputs_origin.to(self.model.device)
             _input_ids_origin = inputs_origin["input_ids"]
             GRABER["input_ids_offset"] = len(_input_ids_origin[0])
 
@@ -1133,7 +1140,7 @@ class Qwen2VLModified(Qwen2VL, CTMixin):
                 return_tensors="pt",
             )
 
-            inputs_cd = inputs_cd.to("cuda")
+            inputs_cd = inputs_cd.to(self.model.device)
 
             if use_vcd:
                 inputs_cd["pixel_values"] = add_diffusion_noise(
@@ -1453,3 +1460,16 @@ class QwenVLModified(QwenVL, CTMixin):
             **kwargs,
         )
         return response, output, None
+
+
+class DummyModified(LM, CTMixin):
+    """A minimal dummy model for quick smoke tests. Returns a canned response."""
+
+    def __init__(self) -> None:
+        name = "dummy"
+        super().__init__(name)
+
+    def submit(self, prompt, image=None, question_id=None, **kwargs):
+        # Simple deterministic response using the prompt
+        resp = f"[DUMMY MODEL] Prompt received: {str(prompt)[:200]}"
+        return resp, None, None

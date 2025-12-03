@@ -44,6 +44,9 @@ if __name__ == "__main__":
     parser.add_argument("--cd_alpha", type=float, default=1)
     parser.add_argument("--cd_beta", type=float, default=0.1)
 
+    # Context reminder prototype: every N generated tokens apply CD scaling
+    parser.add_argument("--reminder-interval", type=int, default=0)
+
     # HalTrapper
     parser.add_argument("--repeat", type=int, default=1)
     parser.add_argument("--repeat_mode", type=str, default="continuous")
@@ -73,6 +76,7 @@ if __name__ == "__main__":
     assert model_name in [
         "llava",
         "llava13",
+        "dummy",
         "januspro",
         "qwen2vl",
         "minigpt4",
@@ -87,6 +91,10 @@ if __name__ == "__main__":
         model = LlavaModified()
     elif model_name == "llava13":
         model = LlavaModified(size="13b")
+    elif model_name == "dummy":
+        from models_modified import DummyModified
+
+        model = DummyModified()
     elif model_name == "januspro":
         model = JanusProModified()
     elif model_name == "qwen2vl":
@@ -136,6 +144,7 @@ if __name__ == "__main__":
             "ee_threshold": ee_threshold,
             "ig_threshold": ig_threshold,
             "ig_strategy": args.ig_strategy,
+            "reminder_interval": args.reminder_interval,
         }
     elif method == "vcd":
         method_kwargs = {
@@ -143,12 +152,14 @@ if __name__ == "__main__":
             "cd_beta": args.cd_beta,
             "noise_step": args.noise_step,
             "cd_type": "contrastive",
+            "reminder_interval": args.reminder_interval,
         }
     elif method == "icd":
         method_kwargs = {
             "cd_alpha": args.cd_alpha,
             "cd_beta": args.cd_beta,
             "cd_type": "contrastive",
+            "reminder_interval": args.reminder_interval,
         }
     elif method == "pai":
         method_kwargs = {"pai_alpha": args.pai_alpha}

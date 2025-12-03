@@ -43,6 +43,30 @@ class BenchBase(Dataset[tuple[str, Optional[PathObj], Optional[dict[Any, Any]]]]
         self.get_score(*args, **kwargs)
 
 
+class ToyBench(BenchBase, cmd_name="toy"):
+    """A tiny benchmark for quick smoke tests that requires no external data."""
+    name = "toy"
+
+    def __init__(self, total: int = 3) -> None:
+        super().__init__()
+        self.items = [
+            ("Describe this image.", None, {"id": i}) for i in range(total)
+        ]
+
+    def __len__(self):
+        return len(self.items)
+
+    def __getitem__(self, index):
+        return self.items[index]
+
+    def get_score(self, log_list, log_file_path) -> None:
+        # Simple scorer: write outputs to file and print count
+        from ._utils._path import save_structured_file
+
+        save_structured_file(log_list, str(log_file_path), "w")
+        print(f"ToyBench: evaluated {len(log_list)} examples. Results saved to {log_file_path}")
+
+
 class CHAIR(BenchBase):
     name = "chair"
     fixed_500 = [
